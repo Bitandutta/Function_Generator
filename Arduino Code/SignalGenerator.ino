@@ -2,14 +2,11 @@
 #include "AD9833.h"
 #include "Rotary.h"
 
-//Uncomment the line below if you want to change the Phase instead of the FREQ register
-//#define usePhase
 
 AD9833 sigGen(10, 24000000); // Initialise our AD9833 with FSYNC pin = 10 and a master clock frequency of 24MHz
 LiquidCrystal_I2C lcd(0x27, 16, 2); // LCD Initialise
 Rotary encoder(3, 2);// Initialise the encoder on pins 2 and 3 (interrupt pins)
 
-// Variables used to input data and walk through menu
 unsigned long encValue;        // Value used by encoder
 unsigned long lastButtonPress; // Value used by button debounce
 unsigned char lastButtonState;
@@ -26,10 +23,10 @@ unsigned long newFrequency = 1000;
 volatile bool updateDisplay = false;
 unsigned long depressionTime;
 int freqRegister = 0; // Default FREQ register is 0
-// LCD constants
+
 const String powerState[] = {" ON", "OFF"};
 const String mode[] = {"SIN", "TRI", "CLK"};
-// Variables used to store phase, frequency, mode and power
+
 unsigned char currentMode = 0;
 unsigned long frequency0 = 1000;
 unsigned long frequency1 = 1000;
@@ -37,14 +34,12 @@ unsigned long frequency = frequency0;
 unsigned long currFrequency; // Current frequency used, either 0 or 1
 unsigned long phase = 0; // Only used if you enable PHASE setting instead of FREQ register
 unsigned char currentPowerState = 0;
-// Greek PHI symbol for phase shift
-// Only used if you enable PHASE setting instead of FREQ register
+
 uint8_t phi[8] = {0b01110, 0b00100, 0b01110, 0b10101,
                   0b10101, 0b01110, 0b00100, 0b01110
                  };
 
 void setup() {
-  // Initialise the LCD, start the backlight and print a "bootup" message for two seconds
   lcd.begin();
   lcd.backlight();
   lcd.createChar(0, phi); // Custom PHI char for LCD
@@ -53,7 +48,7 @@ void setup() {
   lcd.setCursor(2, 1);
   lcd.print("Samrat Dutta");
   delay(2000);
-  // Display initial set values for freq, phase, mode and power
+
   lcd.clear();
   displayFrequency();
   displayMode();
@@ -64,8 +59,7 @@ void setup() {
 #ifndef usePhase
   displayFreqRegister();
 #endif
-  // Initialise the AD9833 with 1KHz sine output, no phase shift for both
-  // registers and remain on the FREQ0 register
+
   // sigGen.lcdDebugInit(&lcd);
   sigGen.reset(1);
   sigGen.setFreq(frequency0);
@@ -77,23 +71,22 @@ void setup() {
   sigGen.mode(currentMode);
   sigGen.reset(0);
 
-  // Set pins A and B from encoder as interrupts
+
   attachInterrupt(digitalPinToInterrupt(2), encChange, CHANGE);
   attachInterrupt(digitalPinToInterrupt(3), encChange, CHANGE);
-  // Initialise pin as input with pull-up enabled and debounce variable for
-  // encoder button
+
   pinMode(4, INPUT_PULLUP);
   lastButtonPress = millis();
   lastButtonState = 1;
   button = 1;
-  // Set Cursor to initial possition
+
   lcd.setCursor(0, 0);
 }
 
 void loop() {
-  // Check to see if the button has been pressed
+
   checkButton();
-  // Update display if needed
+
   if (updateDisplay == true) {
     displayFrequency();
 #ifdef usePhase
@@ -106,16 +99,9 @@ void loop() {
     displayMode();
     updateDisplay = false;
   }
-  // We are using the variable menuState to know where we are in the menu and
-  // what to do in case we press the button or increment/drecrement via the
-  // encoder
-  // Enter setting mode if the button has been pressed and display blinking
-  // cursor over options (menuState 0)
-  // Pick a setting (menuState 1)
-  // Change that particular setting and save settings (menuState 2-5)
 
   switch (menuState) {
-    // Default state
+
     case 0: {
         lcd.noBlink();
         if (button == 0) {
@@ -126,7 +112,7 @@ void loop() {
           cursorPos = 0;
         }
       } break;
-    // Settings mode
+
     case 1: {
         if (button == 0) {
           button = 1;
@@ -140,7 +126,7 @@ void loop() {
             else
               sigGen.sleep(0); // DAC and clock are turned ON
           }
-          // If usePhase has not been set
+
 #ifndef usePhase
           else if (cursorPos == 2) {
             updateDisplay = true;
@@ -156,11 +142,11 @@ void loop() {
             }
           }
 #endif
-          // Otherwise just set a new state
+
           else
             menuState = cursorPos + 2;
         }
-        // Move the cursor position in case it changed
+
         if (lastCursorPos != cursorPos) {
           unsigned char realPosR = 0;
           unsigned char realPosC;
@@ -174,10 +160,8 @@ void loop() {
           lastCursorPos = cursorPos;
         }
       } break;
-    // Frequency setting
+    
     case 2: {
-        // Each button press will either enable to change the value of another digit
-        // or if all digits have been changed, to apply the setting
         if (button == 0) {
           button = 1;
           if (digitPos < 7)
@@ -192,11 +176,9 @@ void loop() {
           digitPos = 0;
           menuState = 0;
         }
-        // Set the blinking cursor on the digit you can currently modify
         lcd.setCursor(9 - digitPos, 0);
       } break;
 
-    // Phase setting
     case 4: {
         if (button == 0) {
           button = 1;
@@ -210,7 +192,7 @@ void loop() {
         }
         lcd.setCursor(5 - digitPos, 1);
       } break;
-    // Change the mode (sine/triangle/clock)
+
     case 5: {
         if (button == 0) {
           button = 1;
@@ -219,14 +201,13 @@ void loop() {
         }
         lcd.setCursor(13 ,1);
       } break;
-    // Just in case we messed something up
+
     default: {
         menuState = 0;
       }
   }
 }
-// Function to debounce the button
-// 0 = pressed, 1 = depressed, 2 = long press
+
 void checkButton() {
   if ((millis() - lastButtonPress) > 100) {
     if (digitalRead(buttonPin) != lastButtonState) {
@@ -238,12 +219,7 @@ void checkButton() {
 }
 
 void encChange() {
-  // Depending in which menu state you are
-  // the encoder will either change the value of a setting:
-  //-+ frequency, change between FREQ0 and FREQ1 register (or -+ phase), On/Off, mode
-  // or it will change the cursor position
   unsigned char state = encoder.process();
-  // Direction clockwise
   if (state == DIR_CW) {
     switch (menuState) {
       case 1: {
@@ -254,12 +230,6 @@ void encChange() {
         } break;
 
       case 2: {
-          // Here we initialise two variables.
-          // newFrequency is the value of the frequency after we increment it
-          // dispDigit is the digit that we are currently modifing, and we obtain it
-          // by a neat little trick, using operator % in conjunction with division
-          // We then compare these variables with the maximum value for our
-          // frequency, if all is good, make the change
           unsigned long newFrequency = frequency + power(10, digitPos);
           unsigned char dispDigit =
             frequency % power(10, digitPos + 1) / power(10, digitPos);
@@ -277,10 +247,6 @@ void encChange() {
         } break;
 
       case 4: {
-          // if usePhase has been defined, changes in the encoder will vary the phase
-          // value (upto 4096)
-          // A better implementation would be to use increment of pi/4 or submultiples of
-          // pi where 2pi = 4096
 #ifdef usePhase
           unsigned long newPhase = phase + power(10, digitPos);
           unsigned char dispDigit =
@@ -301,7 +267,7 @@ void encChange() {
         } break;
     }
   }
-  // Direction counter clockwise
+
   else if (state == DIR_CCW) {
     switch (menuState) {
       case 1: {
@@ -328,10 +294,7 @@ void encChange() {
         } break;
 
       case 4: {
-          // if usePhase has been defined, changes in the encoder will vary the phase
-          // value (upto 4096)
-          // A better implementation would be to use increment of pi/4 or submultiples of
-          // pi where 2pi = 4096
+
 #ifdef usePhase
           unsigned long newPhase = phase + power(10, digitPos);
           unsigned char dispDigit =
@@ -353,7 +316,7 @@ void encChange() {
     }
   }
 }
-// Function to display the current frequency in the top left corner
+
 void displayFrequency() {
   unsigned long frequencyToDisplay = frequency;
   lcd.setCursor(0, 0);
@@ -365,18 +328,17 @@ void displayFrequency() {
   }
   lcd.print("Hz");
 }
-// Function to display power state (ON/OFF) in the top right corner
+
 void displayPower() {
   lcd.setCursor(13, 0);
   lcd.print(powerState[currentPowerState]);
 }
-// Function to display the mode in the bottom right corner
+
 void displayMode() {
   lcd.setCursor(13, 1);
   lcd.print(mode[currentMode]);
 }
-// Function to display the mode in the bottom left corner
-// Only used if you enable PHASE setting instead of FREQ register
+
 void displayPhase() {
   unsigned int phaseToDisplay = phase;
   lcd.setCursor(0, 1);
@@ -388,8 +350,7 @@ void displayPhase() {
     phaseToDisplay -= dispDigit * power(10, i);
   }
 }
-// Function to display the FREQ register (either 0 or 1) in the bottom left
-// corner
+
 void displayFreqRegister() {
   lcd.setCursor(0, 1);
   lcd.print("FREQ ");
